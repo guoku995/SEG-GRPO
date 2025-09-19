@@ -1,6 +1,6 @@
 # SEG-GRPO
-- Authors: [Guoku Jia], [Yuan Liang], [YiShi Chen], [YanMei Meng], [XiangNing Wu]
-- Institutes: The University of Guangxi
+- Authors: [Guoku Jia], [Yuan Liang], [YiShi Chen], [YanMei Meng], [XiangNing Wu], [Jonny Qin]
+- Institutes: The University of Guangxi 
   
 We employ GRPO algorithm to train qwen-VL for Referring image segmentation. We expect that this project can be helpful to human AI interaction and robotics.
 ## Result
@@ -28,7 +28,7 @@ Referring segmentation datasets: [refCOCO](https://web.archive.org/web/202204130
 
 ## Weights
 - Qwen2.5-VL and Sam2 are required, which can be automatically downloaded through the transformers library or downloaded locally from the Huggface website.
-- The trained Lora weight model can be downloaded from here. (https://huggingface.co/guoku/SEG-GRPO).
+- The trained Lora weights can be downloaded from here. (https://huggingface.co/guoku/SEG-GRPO).
 - If you encounter network problems, you can try using the mirror website. (https://hf-mirror.com/guoku/SEG-GRPO)
 
 
