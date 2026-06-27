@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 from pycocotools import mask as maskUtils
 from transformers import CLIPImageProcessor
+from triton.language import dtype
 
 from model.segment_anything.utils.transforms import ResizeLongestSide
 from .refer import REFER
@@ -15,83 +16,24 @@ from PIL import Image
 from torchvision.transforms.functional import resize, to_pil_image
 from qwen_vl_utils import process_vision_info
 
+class Resize:
+    """
+    Resizes images to the longest side 'target_length', as well as provides
+    methods for resizing coordinates and boxes. Provides methods for
+    transforming both numpy array and batched torch tensors.
+    """
+
+    def __init__(self, target_length: int) -> None:
+        self.target_length = target_length
+
+    def apply_image(self, image: np.ndarray) -> np.ndarray:
+        """
+        Expects a numpy array with shape HxWxC in uint8 format.
+        """
+        return np.array(resize(to_pil_image(image), (self.target_length, self.target_length), antialias=None))
 
 
-def collate_fn(
-    batch, tokenizer=None, local_rank=-1
-):
-    image_path_list = []
-    images_list = []
-    masks_list = []
-    label_list = []
-    resize_list = []
-    resize_factor_list=[]
-    sampled_classes_list = []
-    offset_list = [0]
-    cnt = 0
-    inferences = []
-
-    input_ids_list = []
-    attention_mask_list = []
-    pixel_values_list = []
-    image_grid_thw_list = []
-
-    for (
-        image_path,
-        images,
-        masks,
-        label,
-        resize,
-        resize_factor,
-        inputs,
-        sampled_classes,
-        inference,
-    ) in batch:
-        image_path_list.append(image_path)
-        images_list.append(images)
-        label_list.append(label)
-        masks_list.append(masks.float())
-        resize_list.append(resize)
-        resize_factor_list.append(resize_factor)
-        sampled_classes_list.extend(sampled_classes)
-
-        cnt += len(sampled_classes)
-        offset_list.append(cnt)
-        inferences.append(inference)
-
-        # 提取 inputs 中的多模态数据
-        input_ids_list.append(inputs["input_ids"])
-        attention_mask_list.append(inputs["attention_mask"])
-        pixel_values_list.append(inputs["pixel_values"])
-        image_grid_thw_list.append(inputs.get("image_grid_thw", None))
-
-    input_ids = torch.cat(input_ids_list, dim=0)
-    attention_masks = torch.cat(attention_mask_list, dim=0)
-
-    pixel_values = torch.cat(pixel_values_list, dim=0)
-    image_grid_thw = torch.cat(image_grid_thw_list, dim=0) if None not in image_grid_thw_list else None
-
-
-
-    return {
-        "image_paths": image_path_list,
-        "images":images_list,#torch.stack(images_list, dim=0),#,   images_list
-        "input_ids": input_ids,
-        "attention_mask": attention_masks,
-        "masks_list": masks_list,
-        "label_list": label_list,
-        "resize_list": resize_list,
-        "resize_factor_list":resize_factor_list,
-        "offset": torch.LongTensor(offset_list),
-        "sampled_classes_list": sampled_classes_list,
-        "inference": inferences[0],
-
-        "pixel_values": pixel_values,
-        "image_grid_thw": image_grid_thw
-    }
-
-
-class VALDataset(torch.utils.data.Dataset):
+class TrainDataset(torch.utils.data.Dataset):
     pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1)
     pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1)
     img_size = 1024
@@ -100,7 +42,7 @@ class VALDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         base_image_dir,
-        val_dataset,
+        train_dataset,
         image_size=336,
         processor=None,
         transform=ResizeLongestSide(1024)
@@ -109,7 +51,7 @@ class VALDataset(torch.utils.data.Dataset):
         assert isinstance(transform, ResizeLongestSide)
         self.processor = processor
         self.base_image_dir = base_image_dir
-        splits = val_dataset.split("|")
+        splits = train_dataset.split("|")
         if len(splits) == 3:
             ds, splitBy, split = splits
             base_image_dir = os.path.join(base_image_dir, "refer_seg")
@@ -142,16 +84,27 @@ class VALDataset(torch.utils.data.Dataset):
                     ref,
                 ]
             refer_seg_ds["img2refs"] = img2refs
+
+            # refer_seg_ds 三个元素的字典：images/annotations/img2refs
             self.refer_seg_ds = refer_seg_ds
             self.data_type = "refer_seg"
 
         self.transform = transform
+        # 5.3新加
+        # 添加困难样本记录文件
+        self.hard_samples_file = os.path.join(base_image_dir, "hard_samples.json")
+        # 如果文件存在则加载已有困难样本
+        self.hard_sample_ids = set()
+        if os.path.exists(self.hard_samples_file):
+            with open(self.hard_samples_file, 'r') as f:
+                hard_samples = json.load(f)
+                self.hard_sample_ids = {sample['image_id'] for sample in hard_samples}
 
-        self.image_preprocessor = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Resize((image_size, image_size), interpolation=3, antialias=None),
-            transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-        ])
+        # 添加样本ID到图像信息中
+        if self.data_type == "refer_seg":
+            for img_info in self.refer_seg_ds["images"]:
+                img_info['dataset_idx'] = len(self.refer_seg_ds["images"])  # 添加索引
+
 
     def __len__(self):
         if self.data_type == "refer_seg":
@@ -160,7 +113,6 @@ class VALDataset(torch.utils.data.Dataset):
             return len(self.labels)
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        """Normalize pixel values and pad to a square input."""
         # Normalize colors
         x = (x - self.pixel_mean) / self.pixel_std
 
@@ -172,6 +124,12 @@ class VALDataset(torch.utils.data.Dataset):
         return x
 
     def __getitem__(self, idx):
+        #5.3新加
+        if self.data_type == "refer_seg":
+            image_info = self.refer_seg_ds["images"][idx]
+            # 添加是否为困难样本的标记
+            is_hard = image_info['id'] in self.hard_sample_ids
+
         if self.data_type == "refer_seg":
             refer_seg_ds = self.refer_seg_ds
             images = refer_seg_ds["images"]
@@ -218,7 +176,6 @@ class VALDataset(torch.utils.data.Dataset):
                 m = m.astype(np.uint8)  # convert to np.uint8
                 masks.append(m)
 
-
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
@@ -229,12 +186,13 @@ class VALDataset(torch.utils.data.Dataset):
         image_qwen_orgin = Image.open(image_path)
         image_qwen_orgin = image_qwen_orgin.convert('RGB')
         original_width, original_height = image_qwen_orgin.size
-        resize_size = 840
+        resize_size = 256
+        # 缩放比例用于 在原图像中找点
         resize_factor = original_width / resize_size, original_height / resize_size
 
         # preprocess image for sam
         image = self.transform.apply_image(image)  # preprocess image for sam
-        resize = image.shape[:2]
+        resize = image.shape[:2]  #尺寸元组中选前两个
         image = self.preprocess(torch.from_numpy(image).permute(2, 0, 1).contiguous())
 
         if not isinstance(masks, torch.Tensor):
@@ -243,25 +201,21 @@ class VALDataset(torch.utils.data.Dataset):
         labels = torch.ones(masks.shape[1], masks.shape[2]) * self.ignore_label
         inference = False
 
-
-        # QUESTION_TEMPLATE = "Please find '{Question}'."
-        # QUESTION_TEMPLATE = \
-        #     "Find '{Question}'." \
-        #     "The image size is 256*256, locate the most closely matched one." \
-        #     "Output the observing process briefly in <observe> </observe> and final answer in <answer> </answer> tags." \
-        #     "Output the final answer with one bbox and two points inside the interested object in JSON format." \
-        #     "i.e., <observe> observing process here </observe>" \
-        #     "<answer>{Answer}</answer>" \
+        #为什么要json输出？ #
 
         QUESTION_TEMPLATE = \
             "Find '{Question}'." \
-            "The image size is 840*840, locate the most closely matched one." \
-            "Directly output the answer with one bbox and two points inside the interested object in <answer> </answer> tags. i.e., <answer>{Answer}</answer> in JSON format." \
-
+            "The image size is 256*256, locate the most closely matched one." \
+            "Output the observing process briefly in <observe> </observe> and final answer in <answer> </answer> tags." \
+            "Output the final answer with one bbox and two points inside the interested object in JSON format." \
+            "i.e., <observe> observing process here </observe>" \
+            "<answer>{Answer}</answer>" \
 
         messages = []
         i = 0
-        while i < len(sampled_sents):
+        #while i < len(sampled_sents):
+        cut_index=1
+        while i < cut_index:
             message = [{
                 "role": "user",
                 "content": [
@@ -272,16 +226,14 @@ class VALDataset(torch.utils.data.Dataset):
                     {
                         "type": "text",
                         "text": QUESTION_TEMPLATE.format(Question=sampled_sents[i].lower().strip("."),
-                                                         #Answer="[SEG]")
+                                                         #Answer = "[SEG]")
                                                          Answer='{"bbox": [10,100,200,210], "points_1": [30,110], "points_2": [35,180]}')
-
                     }
                 ],
             },
             ]
             messages.append(message)
             i += 1
-
 
         text = [self.processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True) for msg in messages]
 
@@ -291,19 +243,26 @@ class VALDataset(torch.utils.data.Dataset):
         inputs = self.processor(
             text=text,
             images=image_inputs,
-            videos=video_inputs,
+            #videos=video_inputs,
             padding=True,
             return_tensors="pt",
         )
 
-        return (
-            image_path,
-            image_sam2,
-            masks,        # N,640,480
-            labels,       #  640,480
-            resize,       # (1024,768)
-            resize_factor,
-            inputs,
-            sampled_sents,
-            inference,
-        )
+        return {
+            "image_path": image_path,
+            "images": image_sam2,#image.to(dtype=torch.float16), # image_sam2
+            "masks": masks[:cut_index,].float(), #B 428 640
+            "labels": labels,  #428,640
+            "resize_params": resize,
+            "resize_factor":resize_factor,
+            "msg":messages,  #msg包含图片和文本信息，只传这个就行
+            "input_ids": inputs["input_ids"],#.to(dtype=torch.int32),
+            "attention_mask": inputs["attention_mask"],#.to(dtype=torch.int32), 必须啊int64 ？
+            "pixel_values": inputs["pixel_values"].to(dtype=torch.float16),
+            "image_grid_thw": inputs.get("image_grid_thw", None),#.to(dtype=torch.int32),
+
+            "sampled_classes": sampled_sents[:cut_index],
+            "image_id": image_info['id'],  # 添加图像ID
+            "is_hard": is_hard,  # 标记是否为困难样本
+            "dataset_idx": idx,  # 添加数据集索引
+        }
