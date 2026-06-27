@@ -5,7 +5,7 @@
 
 This repository uses the GRPO algorithm to train Qwen-VL for referring image segmentation.
 
-## Result
+## Method
 
 ![](./docs/图片1.png)
 ![](./docs/figure6-V3_01.png)
