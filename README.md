@@ -5,6 +5,12 @@
 
 This repository uses the GRPO algorithm to train Qwen-VL for referring image segmentation.
 
+## Result
+
+![](./docs/model.pdf)
+![](./docs/figure6-V3.pdf)
+![](./docs/figure1.pdf)
+
 ## Project Files
 
 - `qwen_sam2_RL_wcot.py`: main training / running file.
@@ -54,6 +60,33 @@ Install the remaining dependencies:
 pip install -r requirements.txt
 ```
 
+Install the official TRL package:
+
+```bash
+pip install trl==0.16.0
+```
+
+Do not upload the whole local `trl` folder in this repository. This project only requires replacing two files inside the installed TRL package:
+
+- `trl/trainer/grpo_trainer.py`
+- `trl/trainer/grpo_config.py`
+
+Use the versions provided in this repository and overwrite the corresponding files in your virtual environment after `trl==0.16.0` is installed.
+
+Typical locations are:
+
+```text
+<your_env>/Lib/site-packages/trl/trainer/grpo_trainer.py
+<your_env>/Lib/site-packages/trl/trainer/grpo_config.py
+```
+
+The replacement source files in this repository are:
+
+```text
+trl/trainer/grpo_trainer.py
+trl/trainer/grpo_config.py
+```
+
 ## Additional Dependencies
 
 The code uses `SAM2ImagePredictor`, and the scripts also note that SAM2 requires extra dependencies such as:
@@ -95,10 +128,14 @@ This project depends on Qwen-VL base weights and SAM2 weights.
 
 1. Qwen base model
 
+Download mirror:
+
+- [Qwen2.5-VL-3B-Instruct](https://hf-mirror.com/Qwen/Qwen2.5-VL-3B-Instruct)
+
 The training script `qwen_sam2_RL_wcot.py` loads the base model from:
 
 ```text
-checkpoints/4B
+checkpoints/qwen2.5_3B
 ```
 
 The evaluation script `qwen_sam2_eval.py` defaults to:
@@ -107,15 +144,33 @@ The evaluation script `qwen_sam2_eval.py` defaults to:
 checkpoints/qwen2.5_3B
 ```
 
-So before running, prepare local model directories such as:
+Before running, create the local model directories first:
 
 ```text
 checkpoints/
-|-- 4B/
-`-- qwen2.5_3B/
+|-- qwen2.5_3B/
+`-- sam2-hiera-large/
+```
+
+You can create them manually, for example:
+
+```bash
+mkdir checkpoints
+mkdir checkpoints/qwen2.5_3B
+mkdir checkpoints/sam2-hiera-large
+```
+
+Then download and place the Qwen weights into:
+
+```text
+checkpoints/qwen2.5_3B
 ```
 
 2. SAM2 model
+
+Download mirror:
+
+- [facebook/sam2-hiera-large](https://hf-mirror.com/facebook/sam2-hiera-large)
 
 By default, both scripts use:
 
@@ -123,7 +178,25 @@ By default, both scripts use:
 facebook/sam2-hiera-large
 ```
 
-This can be downloaded automatically through Hugging Face, or you can provide a local path with `--segmentation_model_path`.
+You can also download it locally and place it in:
+
+```text
+checkpoints/sam2-hiera-large
+```
+
+Then run the scripts with:
+
+```bash
+--segmentation_model_path ./checkpoints/sam2-hiera-large
+```
+
+Directory example after downloading:
+
+```text
+checkpoints/
+|-- qwen2.5_3B/
+`-- sam2-hiera-large/
+```
 
 3. LoRA weights
 
@@ -160,18 +233,6 @@ Run training:
 python qwen_sam2_RL_wcot.py --dataset_dir ./dataset --train_dataset "refcoco|unc|train" --output_dir ./outputs
 ```
 
-Common arguments:
-
-- `--precision`: `fp32`, `bf16`, or `fp16` default is `bf16`
-- `--dataset_dir`: dataset root, default `./dataset`
-- `--train_dataset`: one of:
-  - `refcoco|unc|train`
-  - `refcoco+|unc|train`
-  - `refcocog|umd|train`
-  - `ReasonSeg|train`
-- `--segmentation_model_path`: default `facebook/sam2-hiera-large`
-- `--output_dir`: output directory
-
 Training logs are written to:
 
 ```text
@@ -198,29 +259,11 @@ Example evaluation command:
 python qwen_sam2_eval.py --dataset_dir ./dataset --val_dataset "refcoco|unc|testA" --reasoning_model_path ./checkpoint-14500-0.3-2 --base_model_path ./checkpoints/qwen2.5_3B
 ```
 
-Common arguments:
-
-- `--precision`: `fp32`, `bf16`, or `fp16` default is `bf16`
-- `--dataset_dir`: dataset root, default `./dataset`
-- `--val_dataset`: one of:
-  - `refcoco|unc|val`
-  - `refcoco|unc|testA`
-  - `refcoco|unc|testB`
-  - `refcoco+|unc|val`
-  - `refcoco+|unc|testA`
-  - `refcoco+|unc|testB`
-  - `refcocog|umd|val`
-  - `refcocog|umd|test`
-  - `ReasonSeg|test`
-- `--segmentation_model_path`: default `facebook/sam2-hiera-large`
-- `--reasoning_model_path`: LoRA or trained checkpoint path
-- `--base_model_path`: base Qwen model path; if omitted, the script uses `checkpoints/qwen2.5_3B`
-
 The evaluation script prints metrics such as `gIoU`, `cIoU`, inference time, token usage, and peak GPU memory.
 
 ## Notes
 
 - The current code is written for GPU execution and uses `flash_attention_2`.
-- `qwen_sam2_RL_wcot.py` expects the Qwen base model to exist locally at `checkpoints/4B`.
+- `qwen_sam2_RL_wcot.py` expects the Qwen base model to exist locally at `checkpoints/qwen2.5_3B`.
 - `qwen_sam2_eval.py` expects the base model at `checkpoints/qwen2.5_3B` unless `--base_model_path` is explicitly provided.
 - If model download is unstable, keep using the Hugging Face mirror or pre-download all required weights locally.
