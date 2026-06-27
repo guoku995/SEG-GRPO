@@ -18,8 +18,6 @@ This repository uses the GRPO algorithm to train Qwen-VL for referring image seg
 
 ## Environment Setup
 
-The current repository configuration is based on `GRPOSEG安装说明.txt`, `requirements.txt`, and the actual script imports.
-
 Recommended environment:
 
 - Python `3.12`
@@ -60,13 +58,13 @@ Install the remaining dependencies:
 pip install -r requirements.txt
 ```
 
-Install the official TRL package:
+Install the official TRL package for llm training:
 
 ```bash
 pip install trl==0.16.0
 ```
 
-Do not upload the whole local `trl` folder in this repository. This project only requires replacing two files inside the installed TRL package:
+Replacing two files inside the installed TRL package for MLLM training:
 
 - `trl/trainer/grpo_trainer.py`
 - `trl/trainer/grpo_config.py`
@@ -79,23 +77,6 @@ Typical locations are:
 <your_env>/Lib/site-packages/trl/trainer/grpo_trainer.py
 <your_env>/Lib/site-packages/trl/trainer/grpo_config.py
 ```
-
-The replacement source files in this repository are:
-
-```text
-trl/trainer/grpo_trainer.py
-trl/trainer/grpo_config.py
-```
-
-## Additional Dependencies
-
-The code uses `SAM2ImagePredictor`, and the scripts also note that SAM2 requires extra dependencies such as:
-
-```bash
-pip install hydra-core iopath
-```
-
-If you do not already have the SAM2 package installed, install it according to the official SAM2 repository and make sure `from sam2.sam2_image_predictor import SAM2ImagePredictor` works in the current environment.
 
 ## Dataset Preparation
 
@@ -182,12 +163,6 @@ You can also download it locally and place it in:
 
 ```text
 checkpoints/sam2-hiera-large
-```
-
-Then run the scripts with:
-
-```bash
---segmentation_model_path ./checkpoints/sam2-hiera-large
 ```
 
 Directory example after downloading:
