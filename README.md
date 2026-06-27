@@ -7,9 +7,8 @@ This repository uses the GRPO algorithm to train Qwen-VL for referring image seg
 
 ## Result
 
-![](./docs/model.pdf)
-![](./docs/figure6-V3.pdf)
-![](./docs/figure1.pdf)
+![](./docs/图片1.png)
+![](./docs/figure6-V3_01.png)
 
 ## Project Files
 
