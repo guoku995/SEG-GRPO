@@ -39,7 +39,7 @@ def parse_args(args):
                                  "refcocog|umd|val", "refcocog|umd|test", "ReasonSeg|test"])
 
     parser.add_argument("--segmentation_model_path", type=str, default="facebook/sam2-hiera-large")
-    parser.add_argument("--reasoning_model_path", type=str, default="outputs/checkpoint-14000-cvpr-wcot-0.6")
+    parser.add_argument("--reasoning_model_path", type=str, default="outputs/")
     parser.add_argument("--base_model_path", type=str, default=None)
 
     parser.add_argument("--log_dir", default="./runs")
