@@ -1,4 +1,4 @@
-# SEG-GRPO
+# GRPO-SEG
 
 - Authors: Guoku Jia, Yuan Liang, YiShi Chen, YanMei Meng, XiangNing Wu, Jonny Qin
 - Institute: The University of Guangxi
