@@ -174,10 +174,10 @@ checkpoints/
 
 3. LoRA weights
 
-Trained LoRA weights are available at:
+You can use this LoRA weight to check our evalution results. Trained LoRA weights are available at:
 
-- [Hugging Face: guoku/SEG-GRPO](https://huggingface.co/guoku/SEG-GRPO)
-- [Mirror: hf-mirror](https://hf-mirror.com/guoku/SEG-GRPO)
+- [Hugging Face: guoku/SEG-GRPO](https://huggingface.co/guoku/GRPO-SEG)
+- [Mirror: hf-mirror](https://hf-mirror.com/guoku/GRPO-SEG)
 
 The code also sets:
 
