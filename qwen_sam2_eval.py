@@ -254,10 +254,7 @@ def main(args):
             output_tensor = output_tensor.to("cuda")
             masks_tensor = input_dict["masks_list"][0].int()  #input_dict["masks_list"] is list, [0] for tensor
             masks_tensor = masks_tensor.to("cuda")
-            # if pred_masks.shape[0] != masks_tensor.shape[0]:
-            #     print(f"警告：预测mask数量({pred_masks.shape[0]}) != GT mask数量({masks_tensor.shape[0]})，跳过该样本")
-            #     continue
-            #  Intersection and union
+            
             intersection, union, acc_iou = 0.0, 0.0, 0.0
             for mask_i, output_i in zip(masks_tensor, output_tensor):
                 intersection_i, union_i, _ = intersectionAndUnionGPU(
