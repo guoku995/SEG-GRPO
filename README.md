@@ -4,9 +4,8 @@
   
 We employ GRPO algorithm to train qwen-VL for Referring image segmentation. We expect that this project can be helpful to human AI interaction and robotics.
 ## Result
-![](./docs/figure1.png)
-![](./docs/figure2.png)
-![](./docs/figure3.png)
+![](./docs/model.pdf)
+![](./docs/figure6-V3.pdf)
 
 ## Installation
 we use torch==2.5.1 and transformers==4.49.0, other packages can be found in scripts.
